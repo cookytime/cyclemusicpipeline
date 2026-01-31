@@ -1,7 +1,7 @@
 services:
   cyclemusicpipeline:
     build: .
-    image: cyclemusicpipeline:connect
+    image: ghcr.io/cookytime/cyclemusicpipeline:main
     container_name: cyclemusicpipeline
     env_file:
       - ./cyclemusicpipeline.env
