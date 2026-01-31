@@ -1,0 +1,18 @@
+services:
+  cyclemusicpipeline:
+    build: .
+    image: cyclemusicpipeline:connect
+    container_name: cyclemusicpipeline
+    env_file:
+      - ./cyclemusicpipeline.env
+    environment:
+      # defaults (override in env file if you want)
+      OUT_DIR: /app/captures
+      PULSE_MONITOR_SOURCE: spotify_sink.monitor
+      SPOTIFY_CONNECT_NAME: TrueNAS-Analyzer
+      AUTO_START_PLAYBACK: "1"
+      AUTO_UPLOAD: "1"
+    volumes:
+      # Change the left side to your TrueNAS dataset path
+      - ./captures:/app/captures
+    restart: "no"

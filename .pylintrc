@@ -1,0 +1,94 @@
+[MASTER]
+# Use multiple processes to speed up Pylint
+jobs=0
+
+# Pickle collected data for later comparisons
+persistent=yes
+
+# List of plugins (as comma separated values of python modules names) to load
+load-plugins=
+
+# Discover python modules and packages in the file system subtree
+recursive=yes
+
+# Files or directories to be skipped
+ignore=tests
+
+[MESSAGES CONTROL]
+# Disable specific warnings that are too strict for this project
+disable=
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    R0902,  # too-many-instance-attributes
+    R0903,  # too-few-public-methods
+    R0912,  # too-many-branches
+    R0914,  # too-many-local-variables
+    R0915,  # too-many-statements
+    W0718,  # broad-exception-caught
+    W1514,  # unspecified-encoding (handled by black)
+    C0411,  # wrong-import-order (handled by isort)
+    C0413,  # wrong-import-position
+    W0621,  # redefined-outer-name
+    R1705,  # no-else-return
+    R1725,  # super-with-arguments
+    W1309,  # f-string-without-interpolation
+    R1732,  # consider-using-with
+    W0612,  # unused-variable
+    C0415,  # import-outside-toplevel
+    W1510,  # subprocess-run-check
+    W3101,  # missing-timeout
+    W0127,  # self-assigning-variable
+    C0301,  # line-too-long (handled by black)
+    R0801,  # duplicate-code
+
+[REPORTS]
+# Set the output format
+output-format=colorized
+
+# Tells whether to display a full report or only the messages
+reports=no
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,ex,Run,_,f,mm,ss,ts,r,a,e
+
+# Regular expression matching correct constant names
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__)|([a-z_][a-z0-9_]*))$
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=100
+
+# Maximum number of lines in a module
+max-module-lines=1000
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=10
+
+# Maximum number of attributes for a class
+max-attributes=15
+
+# Maximum number of boolean expressions in a if statement
+max-bool-expr=5
+
+# Maximum number of branch for function / method body
+max-branches=15
+
+# Maximum number of locals for function / method body
+max-locals=20
+
+# Maximum number of return / yield for function / method body
+max-returns=6
+
+# Maximum number of statements in function / method body
+max-statements=60
+
+[IMPORTS]
+# Deprecated modules which should not be used
+deprecated-modules=optparse,tkinter.tix
+
+[EXCEPTIONS]
+# Exceptions that will emit a warning when caught
+overgeneral-exceptions=builtins.BaseException,builtins.Exception

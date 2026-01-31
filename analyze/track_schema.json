@@ -1,0 +1,101 @@
+{
+  "name": "Track",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Name of the track/song"
+    },
+    "artist": {
+      "type": "string",
+      "description": "Artist name"
+    },
+    "album": {
+      "type": "string",
+      "description": "Album name"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "description": "Duration in minutes"
+    },
+    "bpm": {
+      "type": "number",
+      "description": "Beats per minute"
+    },
+    "intensity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "extreme"],
+      "description": "Intensity level of the track"
+    },
+    "focus_area": {
+      "type": "string",
+      "enum": ["warmup", "climb", "sprint", "recovery", "cooldown", "intervals", "endurance"],
+      "description": "Main focus of this track"
+    },
+    "track_type": {
+      "type": "string",
+      "description": "Type of ride (e.g., Rhythm Ride, Speed Intervals, Strength Climb)"
+    },
+    "position": {
+      "type": "string",
+      "description": "Primary position (e.g., Saddle, Standing, Saddle → Standing)"
+    },
+    "resistance_min": {
+      "type": "number",
+      "description": "Minimum resistance level"
+    },
+    "resistance_max": {
+      "type": "number",
+      "description": "Maximum resistance level"
+    },
+    "cadence_min": {
+      "type": "number",
+      "description": "Minimum cadence (rpm)"
+    },
+    "cadence_max": {
+      "type": "number",
+      "description": "Maximum cadence (rpm)"
+    },
+    "choreography": {
+      "type": "array",
+      "description": "Choreography moves/cues for the track",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "description": "When to start this move (e.g., 0:30)"
+          },
+          "move": {
+            "type": "string",
+            "description": "The move or cue"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "description": "How long to hold this move"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional coaching notes"
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of cue"
+          }
+        }
+      }
+    },
+    "cues": {
+      "type": "array",
+      "description": "Coaching cues and motivational phrases",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "General notes about the track"
+    }
+  },
+  "required": ["title"]
+}

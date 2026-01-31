@@ -1,0 +1,43 @@
+Create a Track JSON object matching the provided Track schema.
+
+RIDER SETTINGS (must obey):
+$rider_settings
+
+TRACK LENGTH & REV-STYLE TARGET
+- Tracks are 2:30 to 5:00 minutes.
+- No prep items.
+
+ITEM COUNT TARGET
+- 2:30–3:00 → 5–6 items
+- 3:00–4:00 → 6–8 items
+- 4:00–5:00 → 7–9 items
+(Choose fewer during very intense efforts.)
+
+BLOCK DESIGN
+- Each item is a phrase block/section with a clear ride intention (flat, climb, racing, sprint, recovery).
+- Prefer “hold / repeat / same block” when the music repeats instead of adding new steps.
+
+TIMING (HARD)
+- Every timestamp MUST be a DOWNBEAT from music_map.global.downbeats_s or segment.downbeats_s.
+- Output timestamps in M:SS with SS 00–59.
+- Keep all timestamps within track duration.
+
+ITEM COUNT TARGET (REV-ENDURANCE)
+- Track duration ≈ 4:00.
+- Target 5–6 choreography blocks total.
+- Blocks may be 30–60 seconds when the music is steady.
+- Use repeats/holds when the music sustains.
+
+
+ALLOWED BLOCK STARTS (MUST USE THESE TIMESTAMPS ONLY)
+$allowed_block_starts
+
+RULES FOR USING ALLOWED STARTS
+- Every choreography.timestamp MUST be one of the allowed block starts above.
+- Choose 5–9 of them based on track length to cover the full track (start to finish).
+- No prep/setup items. If you need a pre-cue, put it in notes for the next block.
+
+MUSIC MAP:
+$music_map
+
+Return ONLY the Track JSON object.
