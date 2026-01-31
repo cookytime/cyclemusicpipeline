@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Wait for all checks to succeed
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
@@ -56,7 +56,7 @@ jobs:
             }
 
       - name: Approve the PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
