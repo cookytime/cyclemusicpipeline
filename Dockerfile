@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # Install Python 3.11, pip, Java, and system dependencies
 ENV DEBIAN_FRONTEND=noninteractive \
