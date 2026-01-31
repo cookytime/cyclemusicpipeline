@@ -119,7 +119,10 @@ try:
     print("Testing the token...")
     sp = spotipy.Spotify(auth=token_info["access_token"])
     user = sp.current_user()
-    print(f"✅ Token works! Logged in as: {user['display_name']} ({user['id']})")
+    if user is not None and "display_name" in user and "id" in user:
+        print(f"✅ Token works! Logged in as: {user['display_name']} ({user['id']})")
+    else:
+        print("⚠️  Token test failed: Could not retrieve user information.")
 
 except Exception as e:
     print(f"\n❌ Error: {e}")

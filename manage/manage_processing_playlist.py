@@ -15,9 +15,12 @@ import requests
 from base44_utils import get_all_tracks, get_track_spotify_ids_needing_choreography
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables: use existing env, fallback to .env for local dev
 PROJECT_ROOT = Path(__file__).parent.parent
-load_dotenv(PROJECT_ROOT / ".env")
+required_vars = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN"]
+missing = [v for v in required_vars if not os.environ.get(v)]
+if missing:
+    load_dotenv(PROJECT_ROOT / ".env")
 
 # Spotify API Configuration
 SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID")
@@ -312,11 +315,13 @@ def sync_playlist():
 
 def main():
     """Main entry point."""
+    # Re-fetch after possible .env load
+    SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID")
+    SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET")
+    SPOTIFY_REFRESH_TOKEN = os.environ.get("SPOTIFY_REFRESH_TOKEN")
     if not all([SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN]):
-        print("❌ Missing Spotify credentials in .env file")
-        print(
-            "   Required: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN"
-        )
+        print("❌ Missing Spotify credentials in environment or .env file")
+        print("   Required: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN")
         sys.exit(1)
 
     sync_playlist()

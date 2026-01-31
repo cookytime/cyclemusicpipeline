@@ -36,7 +36,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # System deps:
 # - ffmpeg: capture
 # - pulseaudio + pactl: null sink + monitor
-# - librespot: Spotify Connect playback inside container
 # - libsndfile1: librosa/soundfile backend
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
@@ -44,18 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       pulseaudio-utils \
       libsndfile1 \
       ca-certificates \
-      openjdk-17-jre \
-      gnupg2 \
+         gnupg2 \
     && rm -rf /var/lib/apt/lists/*
-
-
-# Add spocon PPA and install spocon
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7DBE8BF06EA39B78 && \
-    echo 'deb http://ppa.launchpad.net/spocon/spocon/ubuntu bionic main' | tee /etc/apt/sources.list.d/spocon.list && \
-    apt-get update && \
-    apt-get install -y spocon && \
-    rm -rf /var/lib/apt/lists/*
-
 
 WORKDIR /app
 
@@ -73,10 +62,20 @@ RUN mkdir -p /app/captures /tmp/runtime
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+
+# Download and install spotifyd (latest x86_64 release)
+RUN wget -O /tmp/spotifyd.tar.gz https://github.com/Spotifyd/spotifyd/releases/latest/download/spotifyd-linux-x86_64-full.tar.gz  \
+    && tar -xzf /tmp/spotifyd.tar.gz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/spotifyd \
+    && rm /tmp/spotifyd.tar.gz
+
+# Add a default spotifyd config (can be overridden by volume or build arg)
+COPY spotifyd.conf /etc/spotifyd.conf
+
 # Defaults (override via env)
 ENV XDG_RUNTIME_DIR=/tmp/runtime \
     OUT_DIR=/app/captures \
-    PULSE_MONITOR_SOURCE=spotify_sink.monitor \
+    PULSE_MONITOR_SOURCE=auto_null.monitor \
     SPOTIFY_CONNECT_NAME=TrueNAS-Analyzer \
     AUTO_UPLOAD=1 \
     AUTO_START_PLAYBACK=1

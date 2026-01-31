@@ -18,7 +18,7 @@ load_dotenv()
 
 # ===== CONFIG =====
 # Pulse/PipeWire monitor source for your virtual sink
-PULSE_MONITOR_SOURCE = os.environ.get("PULSE_MONITOR_SOURCE", "spotify_sink.monitor")
+PULSE_MONITOR_SOURCE = os.environ.get("PULSE_MONITOR_SOURCE", "auto_null.monitor")
 
 # Where to save captures
 OUT_DIR = Path(os.environ.get("OUT_DIR", "./captures"))
