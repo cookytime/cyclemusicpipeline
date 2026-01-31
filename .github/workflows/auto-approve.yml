@@ -1,0 +1,72 @@
+name: Auto-approve my PRs after CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  pull-requests: write
+  checks: read
+
+jobs:
+  auto_approve:
+    # Only for PRs opened by *you* (set your GitHub username here)
+    if: >
+      github.event.pull_request.user.login == 'YOUR_GITHUB_USERNAME' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for all checks to succeed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const ref = context.payload.pull_request.head.sha;
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Poll check runs on the PR head SHA until all are completed & successful
+            for (let i = 0; i < 60; i++) { // ~10 min max at 10s intervals
+              const { data } = await github.rest.checks.listForRef({
+                owner, repo, ref,
+                per_page: 100,
+              });
+
+              const runs = data.check_runs || [];
+              const completed = runs.length > 0 && runs.every(r => r.status === 'completed');
+              const allOk = completed && runs.every(r =>
+                r.conclusion === 'success' || r.conclusion === 'neutral' || r.conclusion === 'skipped'
+              );
+
+              if (allOk) {
+                core.info(`All checks succeeded on ${ref}`);
+                break;
+              }
+
+              const bad = runs.find(r => r.status === 'completed' && r.conclusion === 'failure');
+              if (bad) {
+                core.setFailed(`Check failed: ${bad.name}`);
+                return;
+              }
+
+              core.info(`Waiting for checks... attempt ${i+1}/60`);
+              await sleep(10_000);
+            }
+
+      - name: Approve the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number,
+              event: "APPROVE",
+              body: "Auto-approved after required checks passed (author: YOUR_GITHUB_USERNAME)."
+            });
