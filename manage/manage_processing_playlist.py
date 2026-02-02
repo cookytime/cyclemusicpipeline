@@ -13,7 +13,7 @@ from pathlib import Path
 
 from manage.base44_utils import get_all_tracks, get_track_spotify_ids_needing_choreography
 from dotenv import load_dotenv
-from spotify_api import (
+from manage.spotify_api import (
     refresh_access_token,
     spotify_delete,
     spotify_get,

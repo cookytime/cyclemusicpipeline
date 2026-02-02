@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-from spotify_api import (
+from manage.spotify_api import (
     refresh_access_token,
     spotify_get,
     spotify_get_currently_playing,
