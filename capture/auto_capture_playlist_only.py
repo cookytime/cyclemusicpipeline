@@ -6,19 +6,26 @@ import signal
 import subprocess
 import sys
 import time
+import psutil  # You may need to install this: pip install psutil
+import requests
 from datetime import datetime
 from pathlib import Path
-
-import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file at project root
+PROJECT_ROOT = Path(__file__).parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
 
 # ===== CONFIG =====
 # Pulse/PipeWire monitor source for your virtual sink
-PULSE_MONITOR_SOURCE = os.environ.get("PULSE_MONITOR_SOURCE", "auto_null.monitor")
+PULSE_MONITOR_SOURCE = os.environ.get("PULSE_MONITOR_SOURCE", "librespot_sink.monitor")
+
+# Librespot config
+LIBRESPOT_PATH = os.environ.get("LIBRESPOT_PATH", "./librespot")
+LIBRESPOT_NAME = os.environ.get("LIBRESPOT_NAME", "CycleMusicLibrespot")
+LIBRESPOT_SINK = os.environ.get("LIBRESPOT_SINK", "librespot_sink")
 
 # Where to save captures
 OUT_DIR = Path(os.environ.get("OUT_DIR", "./captures"))
@@ -30,12 +37,11 @@ POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "1.0"))
 PAD_SECONDS = float(os.environ.get("PAD_SECONDS", "1.0"))
 
 # Path to your track analyzer script
-PROJECT_ROOT = Path(__file__).parent.parent
 ANALYZE_SCRIPT = PROJECT_ROOT / "analyze" / "analyze_track.py"
 TRACKUPDATE_SCRIPT = PROJECT_ROOT / "manage" / "trackupdate.py"
 
-# Optional: upload results to Base44 after analysis
-AUTO_UPLOAD = os.environ.get("AUTO_UPLOAD", "").lower() in {"1", "true", "yes"}
+# Whether to auto-upload to Base44 after analysis (set via env or default to False)
+AUTO_UPLOAD = os.environ.get("AUTO_UPLOAD", "0").lower() in ("1", "true", "yes")
 
 # Required env vars:
 #   SPOTIFY_CLIENT_ID
@@ -291,7 +297,65 @@ def stop_proc(proc: subprocess.Popen | None) -> None:
             proc.kill()
 
 
+def is_librespot_running(verbose=True):
+    for proc in psutil.process_iter(['pid','name','exe','cmdline']):
+        try:
+            cmdline = proc.info.get('cmdline') or []
+            if any('librespot' in str(x) for x in ([proc.info.get('name'), proc.info.get('exe')] + cmdline)):
+                if verbose:
+                    print(f"Found librespot PID {proc.info['pid']}: {' '.join(map(str, cmdline))}")
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return False
+
+
+def start_librespot():
+    """Start librespot as a subprocess if not already running."""
+    if not Path(LIBRESPOT_PATH).exists():
+        print(f"✗ librespot not found at {LIBRESPOT_PATH}")
+        return None
+    if is_librespot_running():
+        print("✓ librespot is already running.")
+        return None
+    env = os.environ.copy()
+    env["PULSE_SINK"] = LIBRESPOT_SINK
+    cmd = [
+        LIBRESPOT_PATH,
+        "--name", LIBRESPOT_NAME,
+        # Do NOT add --username or --password
+    ]
+
+    print(f"Starting librespot: {' '.join(cmd)} with PULSE_SINK={LIBRESPOT_SINK}")
+    try:
+        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(3)
+        if proc.poll() is not None:
+            out, err = proc.communicate()
+            print("✗ librespot exited immediately.")
+            print("stdout:", out.decode())
+            print("stderr:", err.decode())
+            return None
+        print("✓ librespot started.")
+        return proc
+    except Exception as e:
+        print(f"✗ Failed to start librespot: {e}")
+        return None
+
+def stop_librespot(proc):
+    """Stop the librespot subprocess if we started it."""
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+            print("✓ librespot stopped.")
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            print("✓ librespot killed.")
+
 def main():
+    print("DEBUG: main() started")
+    librespot_proc = start_librespot()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Verify analyzer script exists
@@ -422,6 +486,7 @@ def main():
     except KeyboardInterrupt:
         print("\nStopping…")
         stop_proc(ffmpeg_proc)
+        stop_librespot(librespot_proc)
 
 
 if __name__ == "__main__":

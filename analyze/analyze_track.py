@@ -11,7 +11,7 @@ import librosa.effects
 import librosa.segment
 import numpy as np
 from dotenv import load_dotenv
-from mutagen import File as MutagenFile
+from mutagen._file import File as MutagenFile
 from openai import OpenAI
 
 
@@ -214,6 +214,8 @@ def generate_track_choreography_openai(music_map: dict, rider_settings: dict) ->
     )
 
     out_text = resp.choices[0].message.content
+    if out_text is None:
+        raise ValueError("OpenAI response did not contain any content.")
     track_data = json.loads(out_text)
 
     # Force accurate duration from music_map
@@ -416,6 +418,14 @@ def clean_choreography_timestamps(
     return track
 
 
+def _ensure_scalar_float(val):
+    """Convert numpy scalar/array or list to Python float."""
+    if isinstance(val, (np.ndarray, list)):
+        if len(val) == 0:
+            return 0.0
+        return float(val[0])
+    return float(val)
+
 class TrackAnalyzer:
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -542,6 +552,8 @@ class TrackAnalyzer:
                 [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
             )
 
+            if self.chroma is None:
+                raise ValueError("Chroma feature not computed. Run load_audio() first.")
             chroma_mean = np.mean(self.chroma, axis=1)
 
             # Correlate
@@ -680,6 +692,8 @@ class TrackAnalyzer:
     def get_segmentation(self):
         """Breaks track into musical segments."""
         # Use pre-computed chroma
+        if self.chroma is None:
+            raise ValueError("Chroma feature not computed. Run load_audio() first.")
         chroma_stack = librosa.feature.stack_memory(self.chroma, n_steps=10, delay=3)
 
         bounds_frames = librosa.segment.agglomerative(chroma_stack, k=8)
@@ -693,8 +707,8 @@ class TrackAnalyzer:
         local_bounds_times.sort()
 
         segments = []
-        max_rms = float(np.max(self.rms) + 1e-6)
-        max_cent = float(np.max(self.spectral_centroid) + 1e-6)
+        max_rms = float(np.max(self.rms) + 1e-6) if self.rms is not None else 1.0
+        max_cent = float(np.max(self.spectral_centroid) + 1e-6) if self.spectral_centroid is not None else 1.0
 
         for i in range(len(local_bounds_times) - 1):
             start_local = float(local_bounds_times[i])
@@ -712,8 +726,8 @@ class TrackAnalyzer:
             )
             f_end = max(f_end, f_start + 1)
 
-            seg_rms = float(np.mean(self.rms[f_start:f_end]))
-            seg_cent = float(np.mean(self.spectral_centroid[f_start:f_end]))
+            seg_rms = float(np.mean(self.rms[f_start:f_end])) if self.rms is not None else 0.0
+            seg_cent = float(np.mean(self.spectral_centroid[f_start:f_end])) if self.spectral_centroid is not None else 0.0
 
             energy = round(seg_rms / max_rms, 2)
             intensity = round(seg_cent / max_cent, 2)
@@ -728,10 +742,13 @@ class TrackAnalyzer:
                 if energy >= 0.75:
                     intent_hint = "surge"
                 elif energy >= 0.4:
-                    slope, _ = np.polyfit(
-                        np.arange(f_end - f_start), self.rms[f_start:f_end], 1
-                    )
-                    intent_hint = "build" if slope > 0.0001 else "steady"
+                    if self.rms is not None:
+                        slope, _ = np.polyfit(
+                            np.arange(f_end - f_start), self.rms[f_start:f_end], 1
+                        )
+                        intent_hint = "build" if slope > 0.0001 else "steady"
+                    else:
+                        intent_hint = "steady"
                 else:
                     intent_hint = "steady"
 
@@ -739,20 +756,30 @@ class TrackAnalyzer:
             global_start = self._to_global_time(start_local)
             global_end = self._to_global_time(end_local)
 
+            # Ensure global_start and global_end are floats, not lists
+            if isinstance(global_start, (list, np.ndarray)):
+                global_start_val = float(global_start[0]) if global_start else 0.0
+            else:
+                global_start_val = float(global_start)
+            if isinstance(global_end, (list, np.ndarray)):
+                global_end_val = float(global_end[0]) if global_end else 0.0
+            else:
+                global_end_val = float(global_end)
+
             # Segment downbeats
             seg_downbeats = []
-            if self.downbeat_times is not None:
+            if self.downbeat_times is not None and isinstance(self.downbeat_times, (list, np.ndarray)):
                 # Filter global downbeats
                 seg_downbeats = [
                     round(float(t), 2)
                     for t in self.downbeat_times
-                    if global_start <= t <= global_end
+                    if global_start_val <= t <= global_end_val
                 ]
 
             segments.append(
                 {
-                    "start_s": round(global_start, 2),
-                    "end_s": round(global_end, 2),
+                    "start_s": round(global_start_val, 2),
+                    "end_s": round(global_end_val, 2),
                     "energy": energy,
                     "intensity": intensity,
                     "tension": tension,
@@ -768,7 +795,7 @@ class TrackAnalyzer:
         anchors = []
 
         peak_frames = librosa.util.peak_pick(
-            self.onset_env,
+            self.onset_env, # pyright: ignore[reportArgumentType]
             pre_max=20,
             post_max=20,
             pre_avg=20,
@@ -780,10 +807,13 @@ class TrackAnalyzer:
             peak_frames, sr=self.sr, hop_length=self.hop_length
         )
 
-        rms_diff = np.diff(self.rms)
-        if len(rms_diff) > 0:
-            thresh = float(np.max(rms_diff) * 0.7)
-            drop_frames = np.where(rms_diff > thresh)[0]
+        if self.rms is not None:
+            rms_diff = np.diff(self.rms)
+            if len(rms_diff) > 0:
+                thresh = float(np.max(rms_diff) * 0.7)
+                drop_frames = np.where(rms_diff > thresh)[0]
+            else:
+                drop_frames = np.array([], dtype=int)
         else:
             drop_frames = np.array([], dtype=int)
 
@@ -794,16 +824,22 @@ class TrackAnalyzer:
         # Process Drops
         for t_local in local_drop_times:
             t_global = self._to_global_time(t_local)
+            # Ensure t_global is a float, not a list or array
+            if isinstance(t_global, (list, np.ndarray)):
+                t_global_val = float(t_global[0]) if t_global else 0.0
+            else:
+                t_global_val = float(t_global)
 
             if self.snap_anchors_to_downbeat and self.downbeat_times is not None:
                 # Suggestion 6: Use tolerance
+                t_global_val = float(t_global_val)
                 t_global = self._snap_to_nearest(
-                    t_global, self.downbeat_times, self.snap_tolerance_s
+                    t_global_val, np.array(self.downbeat_times), self.snap_tolerance_s
                 )
 
             anchors.append(
                 {
-                    "time_s": round(t_global, 2),
+                    "time_s": round(_ensure_scalar_float(t_global), 2),
                     "type": "drop",
                     "confidence": 0.85,
                     "reason": "Sudden energy spike",
@@ -813,16 +849,22 @@ class TrackAnalyzer:
         # Process Peaks
         for t_local in local_peak_times:
             t_global = self._to_global_time(t_local)
+            # Ensure t_global is a float, not a list or array
+            if isinstance(t_global, (list, np.ndarray)):
+                t_global_val = float(t_global[0]) if t_global else 0.0
+            else:
+                t_global_val = float(t_global)
 
             if self.snap_anchors_to_downbeat and self.downbeat_times is not None:
+                t_global_val = float(t_global_val)
                 t_global = self._snap_to_nearest(
-                    t_global, self.downbeat_times, self.snap_tolerance_s
+                    t_global_val, np.array(self.downbeat_times), self.snap_tolerance_s
                 )
 
-            if not any(abs(t_global - a["time_s"]) < 1.0 for a in anchors):
+            if not any(abs(_ensure_scalar_float(t_global) - a["time_s"]) < 1.0 for a in anchors):
                 anchors.append(
                     {
-                        "time_s": round(t_global, 2),
+                        "time_s": round(_ensure_scalar_float(t_global), 2),
                         "type": "peak",
                         "confidence": 0.7,
                         "reason": "Strong transient onset",
@@ -887,12 +929,14 @@ class TrackAnalyzer:
                 "tempo_bpm": round(float(self.tempo), 1),
                 "beats_s": (
                     [round(float(t), 2) for t in self.beat_times]
-                    if self.beat_times is not None
+                    if self.beat_times is not None and isinstance(self.beat_times, (list, np.ndarray))
+                    else [round(float(self.beat_times), 2)] if isinstance(self.beat_times, (float, int))
                     else []
                 ),
                 "downbeats_s": (
                     [round(float(t), 2) for t in self.downbeat_times]
-                    if self.downbeat_times is not None
+                    if self.downbeat_times is not None and isinstance(self.downbeat_times, (list, np.ndarray))
+                    else [round(float(self.downbeat_times), 2)] if isinstance(self.downbeat_times, (float, int))
                     else []
                 ),
             },
