@@ -6,13 +6,18 @@ import signal
 import subprocess
 import sys
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 import psutil  # You may need to install this: pip install psutil
-import requests
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+from spotify_api import (
+    refresh_access_token,
+    spotify_get,
+    spotify_get_currently_playing,
+)
 # Load environment variables from .env file at project root
 PROJECT_ROOT = Path(__file__).parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -42,17 +47,12 @@ TRACKUPDATE_SCRIPT = PROJECT_ROOT / "manage" / "trackupdate.py"
 
 # Whether to auto-upload to Base44 after analysis (set via env or default to False)
 AUTO_UPLOAD = os.environ.get("AUTO_UPLOAD", "0").lower() in ("1", "true", "yes")
-
-# Required env vars:
-#   SPOTIFY_CLIENT_ID
-#   SPOTIFY_CLIENT_SECRET
-#   SPOTIFY_REFRESH_TOKEN
-#   SPOTIFY_PLAYLIST_URL (can be full URL or just ID)
-SPOTIFY_CLIENT_ID = os.environ["SPOTIFY_CLIENT_ID"]
-SPOTIFY_CLIENT_SECRET = os.environ["SPOTIFY_CLIENT_SECRET"]
-SPOTIFY_REFRESH_TOKEN = os.environ["SPOTIFY_REFRESH_TOKEN"]
-PLAYLIST_URL = os.environ["SPOTIFY_PLAYLIST_URL"]
-
+# Run analysis in the background to keep capturing new tracks
+ANALYZE_IN_BACKGROUND = os.environ.get("ANALYZE_IN_BACKGROUND", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 def extract_playlist_id(playlist_url: str) -> str:
     """
@@ -75,55 +75,30 @@ def extract_playlist_id(playlist_url: str) -> str:
     raise ValueError(f"Invalid Spotify playlist URL or ID: {playlist_url}")
 
 
-PLAYLIST_ID = extract_playlist_id(PLAYLIST_URL)
-
-
 def extract_spotify_id(filename: str) -> str | None:
     """Extract Spotify ID from filename (22-character base62 string)."""
     match = re.search(r"\b([0-9A-Za-z]{22})\b", filename)
     return match.group(1) if match else None
 
 
-def refresh_access_token() -> str:
-    r = requests.post(
-        "https://accounts.spotify.com/api/token",
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": SPOTIFY_REFRESH_TOKEN,
-            "client_id": SPOTIFY_CLIENT_ID,
-            "client_secret": SPOTIFY_CLIENT_SECRET,
-        },
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
+def load_spotify_config() -> dict:
+    """Load required Spotify config values from the environment."""
+    required_vars = [
+        "SPOTIFY_CLIENT_ID",
+        "SPOTIFY_CLIENT_SECRET",
+        "SPOTIFY_REFRESH_TOKEN",
+        "SPOTIFY_PLAYLIST_URL",
+    ]
+    missing = [name for name in required_vars if not os.environ.get(name)]
+    if missing:
+        raise KeyError(f"Missing Spotify config: {', '.join(missing)}")
 
-
-def spotify_get(token: str, url: str, params=None) -> dict:
-    r = requests.get(
-        url,
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=10,
-    )
-    if r.status_code == 401:
-        raise PermissionError("Spotify token expired/unauthorized")
-    r.raise_for_status()
-    return r.json()
-
-
-def get_currently_playing(token: str) -> dict | None:
-    r = requests.get(
-        "https://api.spotify.com/v1/me/player/currently-playing",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=10,
-    )
-    if r.status_code == 204:
-        return None
-    if r.status_code == 401:
-        raise PermissionError("Spotify token expired/unauthorized")
-    r.raise_for_status()
-    return r.json()
+    return {
+        "client_id": os.environ["SPOTIFY_CLIENT_ID"],
+        "client_secret": os.environ["SPOTIFY_CLIENT_SECRET"],
+        "refresh_token": os.environ["SPOTIFY_REFRESH_TOKEN"],
+        "playlist_url": os.environ["SPOTIFY_PLAYLIST_URL"],
+    }
 
 
 def fetch_playlist_track_ids(token: str, playlist_id: str) -> set[str]:
@@ -286,6 +261,15 @@ def run_analyzer(wav_path: Path) -> bool:
         return False
 
 
+def submit_analysis(
+    executor: ThreadPoolExecutor, wav_path: Path
+) -> Future | None:
+    if not ANALYZE_IN_BACKGROUND:
+        return None
+    print(f"  🧵 Starting background pipeline for {wav_path.name}")
+    return executor.submit(run_analyzer, wav_path)
+
+
 def stop_proc(proc: subprocess.Popen | None) -> None:
     if not proc:
         return
@@ -357,6 +341,8 @@ def main():
     print("DEBUG: main() started")
     librespot_proc = start_librespot()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    analysis_executor = ThreadPoolExecutor(max_workers=1)
+    analysis_futures: list[Future] = []
 
     # Verify analyzer script exists
     if not ANALYZE_SCRIPT.exists():
@@ -364,11 +350,17 @@ def main():
         print("   Expected location: analyze/analyze_track.py")
         sys.exit(1)
 
-    token = refresh_access_token()
-    playlist_track_ids = fetch_playlist_track_ids(token, PLAYLIST_ID)
-    playlist_uri = f"spotify:playlist:{PLAYLIST_ID}"
+    spotify_config = load_spotify_config()
+    playlist_id = extract_playlist_id(spotify_config["playlist_url"])
+    token = refresh_access_token(
+        spotify_config["client_id"],
+        spotify_config["client_secret"],
+        spotify_config["refresh_token"],
+    )
+    playlist_track_ids = fetch_playlist_track_ids(token, playlist_id)
+    playlist_uri = f"spotify:playlist:{playlist_id}"
 
-    print(f"Loaded {len(playlist_track_ids)} tracks from playlist: {PLAYLIST_ID}")
+    print(f"Loaded {len(playlist_track_ids)} tracks from playlist: {playlist_id}")
     print(f"Capturing audio from: {PULSE_MONITOR_SOURCE}")
     print(f"Writing files to: {OUT_DIR.resolve()}")
     print(f"Analyzer: {ANALYZE_SCRIPT.relative_to(PROJECT_ROOT)}")
@@ -383,10 +375,14 @@ def main():
         while True:
             # Get currently playing
             try:
-                payload = get_currently_playing(token)
+                payload = spotify_get_currently_playing(token)
             except PermissionError:
-                token = refresh_access_token()
-                payload = get_currently_playing(token)
+                token = refresh_access_token(
+                    spotify_config["client_id"],
+                    spotify_config["client_secret"],
+                    spotify_config["refresh_token"],
+                )
+                payload = spotify_get_currently_playing(token)
 
             if not payload or not payload.get("is_playing"):
                 # If nothing playing, ensure we aren't recording
@@ -468,11 +464,16 @@ def main():
             # If ffmpeg finished, analyze and reset
             if ffmpeg_proc and ffmpeg_proc.poll() is not None and current_wav:
                 if current_wav.exists() and current_wav.stat().st_size > 100_000:
-                    success = run_analyzer(current_wav)
-                    if success:
-                        print(f"✅ Track fully processed\n")
+                    if ANALYZE_IN_BACKGROUND:
+                        future = submit_analysis(analysis_executor, current_wav)
+                        if future:
+                            analysis_futures.append(future)
                     else:
-                        print(f"⚠️ Track captured but analysis failed\n")
+                        success = run_analyzer(current_wav)
+                        if success:
+                            print(f"✅ Track fully processed\n")
+                        else:
+                            print(f"⚠️ Track captured but analysis failed\n")
                 else:
                     print(f"⚠️ Skipped tiny capture: {current_wav.name}\n")
 
@@ -487,6 +488,12 @@ def main():
         print("\nStopping…")
         stop_proc(ffmpeg_proc)
         stop_librespot(librespot_proc)
+    finally:
+        if analysis_futures:
+            print("Waiting for background analysis tasks to complete...")
+        for future in analysis_futures:
+            future.result()
+        analysis_executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":

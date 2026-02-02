@@ -11,9 +11,15 @@ import os
 import sys
 from pathlib import Path
 
-import requests
-from base44_utils import get_all_tracks, get_track_spotify_ids_needing_choreography
+from manage.base44_utils import get_all_tracks, get_track_spotify_ids_needing_choreography
 from dotenv import load_dotenv
+from spotify_api import (
+    refresh_access_token,
+    spotify_delete,
+    spotify_get,
+    spotify_post,
+    spotify_put,
+)
 
 # Load environment variables: use existing env, fallback to .env for local dev
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -31,78 +37,6 @@ SPOTIFY_REFRESH_TOKEN = os.environ.get("SPOTIFY_REFRESH_TOKEN")
 PLAYLIST_NAME = os.getenv("PROCESSING_PLAYLIST_NAME", "🎵 Choreography Queue")
 PLAYLIST_DESCRIPTION = "Tracks awaiting choreography generation - managed automatically"
 MAX_PLAYLIST_SIZE = int(os.getenv("MAX_PLAYLIST_SIZE", "50"))
-
-
-def refresh_spotify_token():
-    """Refresh Spotify access token."""
-    r = requests.post(
-        "https://accounts.spotify.com/api/token",
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": SPOTIFY_REFRESH_TOKEN,
-            "client_id": SPOTIFY_CLIENT_ID,
-            "client_secret": SPOTIFY_CLIENT_SECRET,
-        },
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
-
-
-def spotify_get(token, url, params=None):
-    """Make GET request to Spotify API."""
-    r = requests.get(
-        url,
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json()
-
-
-def spotify_post(token, url, data=None):
-    """Make POST request to Spotify API."""
-    r = requests.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        json=data,
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json() if r.text else None
-
-
-def spotify_put(token, url, data=None):
-    """Make PUT request to Spotify API."""
-    r = requests.put(
-        url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        json=data,
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json() if r.text else None
-
-
-def spotify_delete(token, url, data=None):
-    """Make DELETE request to Spotify API."""
-    r = requests.delete(
-        url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        json=data,
-        timeout=10,
-    )
-    r.raise_for_status()
 
 
 def get_user_id(token):
@@ -227,7 +161,9 @@ def sync_playlist():
 
     # Get Spotify token
     print("Step 1: Authenticating with Spotify...")
-    token = refresh_spotify_token()
+    token = refresh_access_token(
+        SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN
+    )
     user_id = get_user_id(token)
     print(f"  ✓ Logged in as: {user_id}\n")
 
