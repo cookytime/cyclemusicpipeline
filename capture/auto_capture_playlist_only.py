@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import psutil  # You may need to install this: pip install psutil
 from datetime import datetime
 from pathlib import Path
 
@@ -291,7 +292,57 @@ def stop_proc(proc: subprocess.Popen | None) -> None:
             proc.kill()
 
 
+def is_librpspot_running():
+    """Check if librpspot is already running."""
+    for proc in psutil.process_iter(['name', 'exe', 'cmdline']):
+        try:
+            if 'librpspot' in proc.info['name'] or \
+               (proc.info['exe'] and 'librpspot' in proc.info['exe']) or \
+               (proc.info['cmdline'] and any('librpspot' in str(arg) for arg in proc.info['cmdline'])):
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return False
+
+def start_librpspot():
+    """Start librpspot as a subprocess if not already running."""
+    librpspot_path = "/usr/local/bin/librpspot"
+    print(f"Trying to start librpspot at: {librpspot_path}")
+    if not Path(librpspot_path).exists():
+        print(f"✗ librpspot not found at {librpspot_path}")
+        return None
+    if is_librpspot_running():
+        print("✓ librpspot is already running.")
+        return None
+    try:
+        proc = subprocess.Popen([librpspot_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("✓ librpspot started.")
+        time.sleep(3)
+        if proc.poll() is not None:
+            out, err = proc.communicate()
+            print("✗ librpspot exited immediately.")
+            print("stdout:", out.decode())
+            print("stderr:", err.decode())
+            return None
+        return proc
+    except Exception as e:
+        print(f"✗ Failed to start librpspot: {e}")
+        return None
+
+def stop_librpspot(proc):
+    """Stop the librpspot subprocess if we started it."""
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+            print("✓ librpspot stopped.")
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            print("✓ librpspot killed.")
+
 def main():
+    print("DEBUG: main() started")
+    librpspot_proc = start_librpspot()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Verify analyzer script exists
