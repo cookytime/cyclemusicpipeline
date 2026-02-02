@@ -4,6 +4,7 @@ Main entry point - orchestrates track analysis and Base44 updates.
 Processes all WAV files in the captures directory.
 """
 
+import argparse
 import re
 import subprocess
 import sys
@@ -78,8 +79,8 @@ def process_wav_file(wav_path: Path, project_root: Path) -> bool:
         return False
 
 
-def main():
-    """Main function - process all WAV files in captures directory."""
+def process_captures() -> None:
+    """Process all WAV files in the captures directory."""
     project_root = Path(__file__).parent
     captures_dir = project_root / "captures"
 
@@ -125,6 +126,54 @@ def main():
     print(f"❌ Failed: {results['failed']}")
     print(f"⏭️  Skipped: {results['skipped']}")
     print(f"Total: {len(wav_files)}")
+
+
+def run_processing_playlist_sync() -> None:
+    """Sync the Spotify processing playlist."""
+    from manage import manage_processing_playlist
+
+    manage_processing_playlist.main()
+
+
+def run_playlist_capture() -> None:
+    """Capture audio for the configured Spotify playlist."""
+    from capture import auto_capture_playlist_only
+
+    auto_capture_playlist_only.main()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="CycleMusicPipeline orchestration entry point."
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser(
+        "process-captures",
+        help="Process WAV files in the captures directory (default).",
+    )
+    subparsers.add_parser(
+        "sync-playlist",
+        help="Sync the Spotify processing playlist for choreography.",
+    )
+    subparsers.add_parser(
+        "capture-playlist",
+        help="Capture audio from the configured Spotify playlist.",
+    )
+    return parser
+
+
+def main():
+    """Main function - orchestrates pipeline tasks."""
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command == "sync-playlist":
+        run_processing_playlist_sync()
+    elif args.command == "capture-playlist":
+        run_playlist_capture()
+    else:
+        process_captures()
 
 
 if __name__ == "__main__":
