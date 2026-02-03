@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=70.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyclemusicpipeline"
+version = "0.1.0"
+description = "Automated Spotify playlist capture, analysis, and choreography pipeline."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "cookytime" }]
+dynamic = ["dependencies"]
+
+[project.scripts]
+auto-capture-playlist = "capture.auto_capture_playlist_only:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["analyze*", "manage*", "capture*", "archive*", "prompts*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }

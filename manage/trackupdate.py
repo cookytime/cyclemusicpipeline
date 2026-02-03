@@ -1,4 +1,30 @@
 #!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+
+def _reexec_with_venv() -> None:
+    if __name__ != "__main__":
+        return
+    if os.environ.get("VIRTUAL_ENV"):
+        return
+    start = Path(__file__).resolve().parent
+    venv_python = None
+    for parent in (start, *start.parents):
+        candidate = parent / ".venv" / "bin" / "python"
+        if candidate.exists():
+            venv_python = candidate
+            break
+    if venv_python is None:
+        return
+    if Path(sys.executable).resolve() == venv_python.resolve():
+        return
+    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+
+
+_reexec_with_venv()
+
 """
 Track management script for Base44 API.
 Updates existing tracks or creates new ones based on Spotify ID.

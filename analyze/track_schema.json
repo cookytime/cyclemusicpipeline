@@ -14,6 +14,18 @@
       "type": "string",
       "description": "Album name"
     },
+    "spotify_id": {
+      "type": "string",
+      "description": "Spotify track ID"
+    },
+    "spotify_album_art": {
+      "type": "string",
+      "description": "URL to Spotify album artwork"
+    },
+    "spotify_url": {
+      "type": "string",
+      "description": "Spotify track URL for playback"
+    },
     "duration_minutes": {
       "type": "number",
       "description": "Duration in minutes"
@@ -24,12 +36,25 @@
     },
     "intensity": {
       "type": "string",
-      "enum": ["low", "medium", "high", "extreme"],
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "extreme"
+      ],
       "description": "Intensity level of the track"
     },
     "focus_area": {
       "type": "string",
-      "enum": ["warmup", "climb", "sprint", "recovery", "cooldown", "intervals", "endurance"],
+      "enum": [
+        "warmup",
+        "climb",
+        "sprint",
+        "recovery",
+        "cooldown",
+        "intervals",
+        "endurance"
+      ],
       "description": "Main focus of this track"
     },
     "track_type": {
@@ -38,7 +63,7 @@
     },
     "position": {
       "type": "string",
-      "description": "Primary position (e.g., Saddle, Standing, Saddle → Standing)"
+      "description": "Primary position (e.g., Saddle, Standing, Saddle \u2192 Standing)"
     },
     "resistance_min": {
       "type": "number",
@@ -66,21 +91,39 @@
             "type": "string",
             "description": "When to start this move (e.g., 0:30)"
           },
-          "move": {
+          "exercise": {
             "type": "string",
-            "description": "The move or cue"
+            "description": "Exercise type (e.g., flat, climb, sprint, recovery, interval)"
           },
-          "duration_seconds": {
+          "resistance": {
+            "type": "string",
+            "description": "Resistance display (e.g., L5, L8)"
+          },
+          "gear": {
             "type": "number",
-            "description": "How long to hold this move"
+            "description": "Gear level (1-10)"
           },
-          "notes": {
+          "position": {
             "type": "string",
-            "description": "Additional coaching notes"
+            "enum": [
+              "Ride easy",
+              "Seated Climb",
+              "Racing Climb",
+              "Standing Climb"
+            ],
+            "description": "Riding position"
           },
-          "type": {
+          "rpmMin": {
+            "type": "number",
+            "description": "Minimum RPM"
+          },
+          "rpmMax": {
+            "type": "number",
+            "description": "Maximum RPM"
+          },
+          "note": {
             "type": "string",
-            "description": "Type of cue"
+            "description": "Optional coaching note or cue"
           }
         }
       }
@@ -97,5 +140,46 @@
       "description": "General notes about the track"
     }
   },
-  "required": ["title"]
+  "required": [
+    "title"
+  ],
+  "rls": {
+    "create": true,
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import requests
+import time
 
 
 def refresh_access_token(
@@ -99,17 +100,48 @@ def spotify_delete(
 
 
 def spotify_get_currently_playing(
-    token: str, timeout: int = 10
+    token: str, timeout: int = 10, retries: int = 3, backoff_s: float = 0.5
 ) -> dict[str, Any] | None:
-    """Get the user's currently playing track, returning None when idle."""
-    response = requests.get(
-        "https://api.spotify.com/v1/me/player/currently-playing",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=timeout,
-    )
-    if response.status_code == 204:
-        return None
-    if response.status_code == 401:
-        raise PermissionError("Spotify token expired/unauthorized")
-    response.raise_for_status()
-    return response.json()
+    """
+    Get the user's currently playing track.
+
+    Returns None when idle or when transient server errors persist after retries.
+    """
+    url = "https://api.spotify.com/v1/me/player/currently-playing"
+    last_response: requests.Response | None = None
+
+    for attempt in range(retries + 1):
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=timeout,
+        )
+        last_response = response
+
+        if response.status_code == 204:
+            return None
+        if response.status_code == 401:
+            raise PermissionError("Spotify token expired/unauthorized")
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "")
+            if attempt < retries:
+                if retry_after.isdigit():
+                    time.sleep(float(retry_after))
+                else:
+                    time.sleep(backoff_s * (2**attempt))
+                continue
+            return None
+
+        if response.status_code >= 500:
+            if attempt < retries:
+                time.sleep(backoff_s * (2**attempt))
+                continue
+            return None
+
+        response.raise_for_status()
+        return response.json()
+
+    if last_response is not None:
+        last_response.raise_for_status()
+    return None

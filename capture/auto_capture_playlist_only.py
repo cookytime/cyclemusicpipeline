@@ -1,4 +1,30 @@
 #!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+
+def _reexec_with_venv() -> None:
+    if __name__ != "__main__":
+        return
+    if os.environ.get("VIRTUAL_ENV"):
+        return
+    start = Path(__file__).resolve().parent
+    venv_python = None
+    for parent in (start, *start.parents):
+        candidate = parent / ".venv" / "bin" / "python"
+        if candidate.exists():
+            venv_python = candidate
+            break
+    if venv_python is None:
+        return
+    if Path(sys.executable).resolve() == venv_python.resolve():
+        return
+    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+
+
+_reexec_with_venv()
+
 import json
 import os
 import re
@@ -13,13 +39,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+# Ensure project root is on sys.path when running as a script.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from manage.spotify_api import (
     refresh_access_token,
     spotify_get,
     spotify_get_currently_playing,
 )
+
 # Load environment variables from .env file at project root
-PROJECT_ROOT = Path(__file__).parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 
@@ -28,12 +59,15 @@ load_dotenv(PROJECT_ROOT / ".env")
 PULSE_MONITOR_SOURCE = os.environ.get("PULSE_MONITOR_SOURCE", "librespot_sink.monitor")
 
 # Librespot config
-LIBRESPOT_PATH = os.environ.get("LIBRESPOT_PATH", "./librespot")
+LIBRESPOT_PATH = os.environ.get("LIBRESPOT_PATH", "/usr/bin/librespot")
 LIBRESPOT_NAME = os.environ.get("LIBRESPOT_NAME", "CycleMusicLibrespot")
-LIBRESPOT_SINK = os.environ.get("LIBRESPOT_SINK", "librespot_sink")
+LIBRESPOT_SINK = os.environ.get("LIBRESPOT_SINK", "auto_null")
+
 
 # Where to save captures
 OUT_DIR = Path(os.environ.get("OUT_DIR", "./captures"))
+TMP_DIR = Path(os.environ.get("TMP_DIR", "./tmp"))
+TMP_DIR.mkdir(exist_ok=True)
 
 # Poll interval for Spotify currently-playing
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "1.0"))
@@ -447,7 +481,9 @@ def main():
                 stop_proc(ffmpeg_proc)
 
                 # Use Spotify ID as filename
-                current_wav = OUT_DIR / f"{track_id}.wav"
+
+                # Store temp wav in TMP_DIR
+                current_wav = TMP_DIR / f"{track_id}.wav"
                 metadata_path = OUT_DIR / f"{track_id}.metadata.json"
 
                 print(f"▶ Capturing (playlist-only): {artists} — {name}")
@@ -461,9 +497,12 @@ def main():
                 current_track_id = track_id
                 current_item = item
 
+
             # If ffmpeg finished, analyze and reset
             if ffmpeg_proc and ffmpeg_proc.poll() is not None and current_wav:
                 if current_wav.exists() and current_wav.stat().st_size > 100_000:
+                    # Move temp wav to OUT_DIR after processing
+                    final_wav = OUT_DIR / current_wav.name
                     if ANALYZE_IN_BACKGROUND:
                         future = submit_analysis(analysis_executor, current_wav)
                         if future:
@@ -474,6 +513,13 @@ def main():
                             print(f"✅ Track fully processed\n")
                         else:
                             print(f"⚠️ Track captured but analysis failed\n")
+                    # Move file only if analysis succeeded or always?
+                    try:
+                        import shutil
+                        shutil.move(str(current_wav), str(final_wav))
+                        print(f"  ✓ Moved {current_wav.name} to captures/")
+                    except Exception as e:
+                        print(f"⚠️ Failed to move wav file: {e}")
                 else:
                     print(f"⚠️ Skipped tiny capture: {current_wav.name}\n")
 
