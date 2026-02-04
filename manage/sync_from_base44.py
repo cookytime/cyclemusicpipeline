@@ -36,7 +36,7 @@ Sync tracks from Base44 API.
 import json
 from pathlib import Path
 
-from base44_utils import filter_tracks_needing_choreography, get_all_tracks
+from manage.base44_utils import filter_tracks_needing_choreography, get_all_tracks
 from dotenv import load_dotenv
 
 # Load environment variables

@@ -49,7 +49,8 @@ from pathlib import Path
 
 def extract_spotify_id(filename: str) -> str | None:
     """Extract Spotify ID from filename (22-character base62 string)."""
-    match = re.search(r"\b([0-9A-Za-z]{22})\b", filename)
+    # Match a 22-character base62 string anywhere in the filename
+    match = re.search(r"([0-9A-Za-z]{22})", filename)
     return match.group(1) if match else None
 
 
