@@ -124,18 +124,6 @@ python3 main.py capture-playlist
 python3 main.py process-captures
 ```
 
-## 🐳 Docker Usage
-
-This project includes a Dockerfile and docker-compose.yml for containerized execution. To build and run:
-
-```bash
-docker-compose build
-docker-compose up
-```
-
-Ensure your .env file is configured with all required environment variables before running Docker.
-
-
 ## 📁 Project Structure
 
 ```
@@ -146,7 +134,6 @@ Ensure your .env file is configured with all required environment variables befo
 ├── manage/                 # Base44 and playlist management
 ├── captures/               # Captured audio and analysis results
 ├── requirements.txt        # Python dependencies
-├── Dockerfile, docker-compose.yml  # Containerization
 ├── README.md               # Project documentation
 └── .gitignore              # Git ignore rules
 ```
