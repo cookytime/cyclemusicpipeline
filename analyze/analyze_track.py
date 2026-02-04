@@ -27,6 +27,7 @@ _reexec_with_venv()
 
 import json
 import os
+import copy
 import re
 import sys
 from pathlib import Path
@@ -61,6 +62,80 @@ class NumpyEncoder(json.JSONEncoder):
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"  # project root /prompts
 
+# -------------------------------------------------------------------
+# Track schema loader / normalizer for OpenAI json_schema (strict)
+# OpenAI requires:
+# - "required" present and containing EVERY key in "properties"
+# - additionalProperties: false
+# We'll satisfy that by (a) making all fields required and (b) allowing nulls.
+# -------------------------------------------------------------------
+
+TRACK_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "track_schema.json"
+
+def _allow_null(schema: dict) -> dict:
+    """Ensure schema's 'type' allows null (without breaking enums)."""
+    sch = copy.deepcopy(schema)
+    t = sch.get("type")
+    if isinstance(t, str):
+        if t != "null":
+            sch["type"] = [t, "null"]
+    elif isinstance(t, list):
+        if "null" not in t:
+            sch["type"] = t + ["null"]
+    # If enum exists, ensure null is allowed too
+    if "enum" in sch and None in sch["enum"]:
+        # JSON schema uses null, not Python None
+        sch["enum"] = ["null" if v is None else v for v in sch["enum"]]
+    return sch
+
+def normalize_for_openai_json_schema(schema: dict) -> dict:
+    """
+    Convert a Base44-style schema payload into a strict JSON Schema suitable for
+    OpenAI response_format json_schema strict=True.
+    """
+    sch = copy.deepcopy(schema)
+    # Some Base44 exports include wrapper keys like "name" and "rls"
+    sch.pop("name", None)
+    sch.pop("rls", None)
+
+    def walk(node: dict) -> dict:
+        node = copy.deepcopy(node)
+
+        # If object with properties, require all keys and disallow extras.
+        if node.get("type") == "object" and isinstance(node.get("properties"), dict):
+            props = node["properties"]
+            # Walk child schemas
+            for k, v in list(props.items()):
+                props[k] = walk(v)
+                # Allow nulls for every property so "required all" is feasible
+                props[k] = _allow_null(props[k])
+
+            node["required"] = list(props.keys())
+            node["additionalProperties"] = False
+            node["properties"] = props
+
+        # If array with items, walk items
+        if node.get("type") == "array" and isinstance(node.get("items"), dict):
+            node["items"] = walk(node["items"])
+
+        return node
+
+    sch = walk(sch)
+    return sch
+
+def load_track_schema() -> dict:
+    p = TRACK_SCHEMA_PATH
+    if not p.exists():
+        # Fall back to /mnt/data if running from a different location
+        alt = Path("/mnt/data/track_schema.json")
+        if alt.exists():
+            p = alt
+        else:
+            raise FileNotFoundError(f"track_schema.json not found at {TRACK_SCHEMA_PATH} or /mnt/data/track_schema.json")
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    return normalize_for_openai_json_schema(raw)
+
+
 
 def load_prompt(name: str) -> str:
     p = PROMPTS_DIR / name
@@ -83,146 +158,7 @@ def generate_track_choreography_openai(music_map: dict, rider_settings: dict) ->
     """Generate a Track JSON object matching the Track schema."""
     client = OpenAI()
 
-    track_schema = {
-        "name": "Track",
-        "type": "object",
-        "properties": {
-            "title": {
-                "type": ["string", "null"],
-                "description": "Name of the track/song",
-            },
-            "artist": {"type": ["string", "null"], "description": "Artist name"},
-            "album": {"type": ["string", "null"], "description": "Album name"},
-            "spotify_id": {
-                "type": ["string", "null"],
-                "description": "Spotify track ID",
-            },
-            "spotify_album_art": {
-                "type": ["string", "null"],
-                "description": "URL to Spotify album artwork",
-            },
-            "spotify_url": {
-                "type": ["string", "null"],
-                "description": "Spotify track URL for playback",
-            },
-            "duration_minutes": {
-                "type": ["number", "null"],
-                "description": "Duration in minutes",
-            },
-            "bpm": {"type": ["number", "null"], "description": "Beats per minute"},
-            "intensity": {
-                "type": ["string", "null"],
-                "enum": ["low", "medium", "high", "extreme", None],
-                "description": "Intensity level of the track",
-            },
-            "focus_area": {
-                "type": ["string", "null"],
-                "enum": [
-                    "warmup",
-                    "climb",
-                    "sprint",
-                    "recovery",
-                    "cooldown",
-                    "intervals",
-                    "endurance",
-                    None,
-                ],
-                "description": "Main focus of this track",
-            },
-            "track_type": {
-                "type": ["string", "null"],
-                "description": "Type of ride (e.g., Rhythm Ride, Speed Intervals, Strength Climb)",
-            },
-            "position": {
-                "type": ["string", "null"],
-                "description": "Primary position (e.g., Saddle, Standing, Saddle → Standing)",
-            },
-            "resistance_min": {
-                "type": ["number", "null"],
-                "description": "Minimum resistance level",
-            },
-            "resistance_max": {
-                "type": ["number", "null"],
-                "description": "Maximum resistance level",
-            },
-            "cadence_min": {
-                "type": ["number", "null"],
-                "description": "Minimum cadence (rpm)",
-            },
-            "cadence_max": {
-                "type": ["number", "null"],
-                "description": "Maximum cadence (rpm)",
-            },
-            "choreography": {
-                "type": "array",
-                "description": "Choreography moves/cues for the track",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "timestamp": {
-                            "type": ["string", "null"],
-                            "description": "When to start this move (e.g., 0:30)",
-                        },
-                        "move": {
-                            "type": ["string", "null"],
-                            "description": "The move or cue",
-                        },
-                        "duration_seconds": {
-                            "type": ["number", "null"],
-                            "description": "How long to hold this move",
-                        },
-                        "notes": {
-                            "type": ["string", "null"],
-                            "description": "Additional coaching notes",
-                        },
-                        "type": {
-                            "type": ["string", "null"],
-                            "description": "Type of cue",
-                        },
-                    },
-                    "required": [
-                        "timestamp",
-                        "move",
-                        "duration_seconds",
-                        "notes",
-                        "type",
-                    ],
-                    "additionalProperties": False,
-                },
-            },
-            "cues": {
-                "type": "array",
-                "description": "Coaching cues and motivational phrases",
-                "items": {"type": "string"},
-            },
-            "notes": {
-                "type": ["string", "null"],
-                "description": "General notes about the track",
-            },
-        },
-        "required": [
-            "title",
-            "artist",
-            "album",
-            "spotify_id",
-            "spotify_album_art",
-            "spotify_url",
-            "duration_minutes",
-            "bpm",
-            "intensity",
-            "focus_area",
-            "track_type",
-            "position",
-            "resistance_min",
-            "resistance_max",
-            "cadence_min",
-            "cadence_max",
-            "choreography",
-            "cues",
-            "notes",
-        ],
-        "additionalProperties": False,
-    }
+    track_schema = load_track_schema()
 
     system_text = load_prompt("system.txt")
     allowed_starts = build_allowed_block_starts(music_map)
@@ -532,7 +468,7 @@ class TrackAnalyzer:
                 sr=self.sr,
                 hop_length=self.hop_length,
             )
-            self.tempo = float(self.tempo)
+            self.tempo = float(self.tempo[0] if isinstance(self.tempo, (list, np.ndarray)) else self.tempo)
 
             # Local beat times (relative to trimmed audio)
             local_beat_times = librosa.frames_to_time(
@@ -1040,7 +976,7 @@ if __name__ == "__main__":
         print(f"✓ Choreography saved: {choreography_path}")
 
         # Also save with spotify_id filename if different
-        spotify_id = track_json.get("spotify_id") or result.get("spotify", {}).get(
+        spotify_id = track_json.get("spotify_id") or (result.get("spotify") or {}).get(
             "spotify_id"
         )
         if spotify_id:

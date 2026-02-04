@@ -54,6 +54,7 @@ def make_api_request(api_path, method="GET", data=None, params=None):
     else:
         response = requests.request(method, url, headers=headers, json=data)
 
+
     response.raise_for_status()
     return response.json()
 
@@ -115,10 +116,6 @@ def create_track(track_data):
             json=track_data,
         )
 
-        # Print response details for debugging
-        if response.status_code not in [200, 201]:
-            print(f"\nAPI Response Status: {response.status_code}")
-            print(f"API Response Body: {response.text}")
 
         response.raise_for_status()
         return response.json()
@@ -143,10 +140,6 @@ def update_track(entity_id, update_data):
             json=update_data,
         )
 
-        # Print response details for debugging
-        if response.status_code != 200:
-            print(f"\nAPI Response Status: {response.status_code}")
-            print(f"API Response Body: {response.text}")
 
         response.raise_for_status()
         return response.json()
