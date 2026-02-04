@@ -25,9 +25,9 @@ def _reexec_with_venv() -> None:
 
 _reexec_with_venv()
 
+import copy
 import json
 import os
-import copy
 import re
 import sys
 from pathlib import Path
@@ -72,6 +72,7 @@ PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"  # project root /p
 
 TRACK_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "track_schema.json"
 
+
 def _allow_null(schema: dict) -> dict:
     """Ensure schema's 'type' allows null (without breaking enums)."""
     sch = copy.deepcopy(schema)
@@ -87,6 +88,7 @@ def _allow_null(schema: dict) -> dict:
         # JSON schema uses null, not Python None
         sch["enum"] = ["null" if v is None else v for v in sch["enum"]]
     return sch
+
 
 def normalize_for_openai_json_schema(schema: dict) -> dict:
     """
@@ -123,6 +125,7 @@ def normalize_for_openai_json_schema(schema: dict) -> dict:
     sch = walk(sch)
     return sch
 
+
 def load_track_schema() -> dict:
     p = TRACK_SCHEMA_PATH
     if not p.exists():
@@ -131,10 +134,11 @@ def load_track_schema() -> dict:
         if alt.exists():
             p = alt
         else:
-            raise FileNotFoundError(f"track_schema.json not found at {TRACK_SCHEMA_PATH} or /mnt/data/track_schema.json")
+            raise FileNotFoundError(
+                f"track_schema.json not found at {TRACK_SCHEMA_PATH} or /mnt/data/track_schema.json"
+            )
     raw = json.loads(p.read_text(encoding="utf-8"))
     return normalize_for_openai_json_schema(raw)
-
 
 
 def load_prompt(name: str) -> str:
@@ -389,6 +393,7 @@ def _ensure_scalar_float(val):
         return float(val[0])
     return float(val)
 
+
 class TrackAnalyzer:
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -468,7 +473,11 @@ class TrackAnalyzer:
                 sr=self.sr,
                 hop_length=self.hop_length,
             )
-            self.tempo = float(self.tempo[0] if isinstance(self.tempo, (list, np.ndarray)) else self.tempo)
+            self.tempo = float(
+                self.tempo[0]
+                if isinstance(self.tempo, (list, np.ndarray))
+                else self.tempo
+            )
 
             # Local beat times (relative to trimmed audio)
             local_beat_times = librosa.frames_to_time(
@@ -671,7 +680,11 @@ class TrackAnalyzer:
 
         segments = []
         max_rms = float(np.max(self.rms) + 1e-6) if self.rms is not None else 1.0
-        max_cent = float(np.max(self.spectral_centroid) + 1e-6) if self.spectral_centroid is not None else 1.0
+        max_cent = (
+            float(np.max(self.spectral_centroid) + 1e-6)
+            if self.spectral_centroid is not None
+            else 1.0
+        )
 
         for i in range(len(local_bounds_times) - 1):
             start_local = float(local_bounds_times[i])
@@ -689,8 +702,14 @@ class TrackAnalyzer:
             )
             f_end = max(f_end, f_start + 1)
 
-            seg_rms = float(np.mean(self.rms[f_start:f_end])) if self.rms is not None else 0.0
-            seg_cent = float(np.mean(self.spectral_centroid[f_start:f_end])) if self.spectral_centroid is not None else 0.0
+            seg_rms = (
+                float(np.mean(self.rms[f_start:f_end])) if self.rms is not None else 0.0
+            )
+            seg_cent = (
+                float(np.mean(self.spectral_centroid[f_start:f_end]))
+                if self.spectral_centroid is not None
+                else 0.0
+            )
 
             energy = round(seg_rms / max_rms, 2)
             intensity = round(seg_cent / max_cent, 2)
@@ -731,7 +750,9 @@ class TrackAnalyzer:
 
             # Segment downbeats
             seg_downbeats = []
-            if self.downbeat_times is not None and isinstance(self.downbeat_times, (list, np.ndarray)):
+            if self.downbeat_times is not None and isinstance(
+                self.downbeat_times, (list, np.ndarray)
+            ):
                 # Filter global downbeats
                 seg_downbeats = [
                     round(float(t), 2)
@@ -758,7 +779,7 @@ class TrackAnalyzer:
         anchors = []
 
         peak_frames = librosa.util.peak_pick(
-            self.onset_env, # pyright: ignore[reportArgumentType]
+            self.onset_env,  # pyright: ignore[reportArgumentType]
             pre_max=20,
             post_max=20,
             pre_avg=20,
@@ -824,7 +845,9 @@ class TrackAnalyzer:
                     t_global_val, np.array(self.downbeat_times), self.snap_tolerance_s
                 )
 
-            if not any(abs(_ensure_scalar_float(t_global) - a["time_s"]) < 1.0 for a in anchors):
+            if not any(
+                abs(_ensure_scalar_float(t_global) - a["time_s"]) < 1.0 for a in anchors
+            ):
                 anchors.append(
                     {
                         "time_s": round(_ensure_scalar_float(t_global), 2),
@@ -892,15 +915,23 @@ class TrackAnalyzer:
                 "tempo_bpm": round(float(self.tempo), 1),
                 "beats_s": (
                     [round(float(t), 2) for t in self.beat_times]
-                    if self.beat_times is not None and isinstance(self.beat_times, (list, np.ndarray))
-                    else [round(float(self.beat_times), 2)] if isinstance(self.beat_times, (float, int))
-                    else []
+                    if self.beat_times is not None
+                    and isinstance(self.beat_times, (list, np.ndarray))
+                    else (
+                        [round(float(self.beat_times), 2)]
+                        if isinstance(self.beat_times, (float, int))
+                        else []
+                    )
                 ),
                 "downbeats_s": (
                     [round(float(t), 2) for t in self.downbeat_times]
-                    if self.downbeat_times is not None and isinstance(self.downbeat_times, (list, np.ndarray))
-                    else [round(float(self.downbeat_times), 2)] if isinstance(self.downbeat_times, (float, int))
-                    else []
+                    if self.downbeat_times is not None
+                    and isinstance(self.downbeat_times, (list, np.ndarray))
+                    else (
+                        [round(float(self.downbeat_times), 2)]
+                        if isinstance(self.downbeat_times, (float, int))
+                        else []
+                    )
                 ),
             },
             "timeline": self.get_segmentation(),

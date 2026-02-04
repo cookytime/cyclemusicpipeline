@@ -33,15 +33,15 @@ Automate queue creation for tracks needing choreography.
 """
 
 
+import json
 import os
 import sys
-import json
 from pathlib import Path
 
 # Ensure parent directory is in sys.path for relative imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from base44_utils import get_all_tracks, filter_tracks_needing_choreography
+from base44_utils import filter_tracks_needing_choreography, get_all_tracks
 from process_queue import process_queue
 
 PROJECT_ROOT = Path(__file__).parent.parent

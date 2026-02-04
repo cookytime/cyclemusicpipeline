@@ -1,11 +1,13 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="cyclemusicpipeline",
     version="0.1.0",
     description="Automated Spotify playlist capture, analysis, and choreography pipeline.",
     author="cookytime",
-    packages=find_packages(include=["analyze*", "manage*", "capture*", "archive*", "prompts*"]),
+    packages=find_packages(
+        include=["analyze*", "manage*", "capture*", "archive*", "prompts*"]
+    ),
     install_requires=[
         "requests",
         "python-dotenv",

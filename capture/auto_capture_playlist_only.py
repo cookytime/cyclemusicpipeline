@@ -33,9 +33,10 @@ import subprocess
 import sys
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-import psutil  # You may need to install this: pip install psutil
 from datetime import datetime
 from pathlib import Path
+
+import psutil  # You may need to install this: pip install psutil
 from dotenv import load_dotenv
 from tqdm import tqdm
 
@@ -44,11 +45,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from manage.spotify_api import (
-    refresh_access_token,
-    spotify_get,
-    spotify_get_currently_playing,
-)
+from manage.spotify_api import (refresh_access_token, spotify_get,
+                                spotify_get_currently_playing)
 
 # Load environment variables from .env file at project root
 load_dotenv(PROJECT_ROOT / ".env")
@@ -87,6 +85,7 @@ ANALYZE_IN_BACKGROUND = os.environ.get("ANALYZE_IN_BACKGROUND", "1").lower() in 
     "true",
     "yes",
 )
+
 
 def extract_playlist_id(playlist_url: str) -> str:
     """
@@ -295,9 +294,7 @@ def run_analyzer(wav_path: Path) -> bool:
         return False
 
 
-def submit_analysis(
-    executor: ThreadPoolExecutor, wav_path: Path
-) -> Future | None:
+def submit_analysis(executor: ThreadPoolExecutor, wav_path: Path) -> Future | None:
     if not ANALYZE_IN_BACKGROUND:
         return None
     print(f"  🧵 Starting background pipeline for {wav_path.name}")
@@ -316,12 +313,17 @@ def stop_proc(proc: subprocess.Popen | None) -> None:
 
 
 def is_librespot_running(verbose=True):
-    for proc in psutil.process_iter(['pid','name','exe','cmdline']):
+    for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
         try:
-            cmdline = proc.info.get('cmdline') or []
-            if any('librespot' in str(x) for x in ([proc.info.get('name'), proc.info.get('exe')] + cmdline)):
+            cmdline = proc.info.get("cmdline") or []
+            if any(
+                "librespot" in str(x)
+                for x in ([proc.info.get("name"), proc.info.get("exe")] + cmdline)
+            ):
                 if verbose:
-                    print(f"Found librespot PID {proc.info['pid']}: {' '.join(map(str, cmdline))}")
+                    print(
+                        f"Found librespot PID {proc.info['pid']}: {' '.join(map(str, cmdline))}"
+                    )
                 return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -340,13 +342,16 @@ def start_librespot():
     env["PULSE_SINK"] = LIBRESPOT_SINK
     cmd = [
         LIBRESPOT_PATH,
-        "--name", LIBRESPOT_NAME,
+        "--name",
+        LIBRESPOT_NAME,
         # Do NOT add --username or --password
     ]
 
     print(f"Starting librespot: {' '.join(cmd)} with PULSE_SINK={LIBRESPOT_SINK}")
     try:
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         time.sleep(3)
         if proc.poll() is not None:
             out, err = proc.communicate()
@@ -360,6 +365,7 @@ def start_librespot():
         print(f"✗ Failed to start librespot: {e}")
         return None
 
+
 def stop_librespot(proc):
     """Stop the librespot subprocess if we started it."""
     if proc and proc.poll() is None:
@@ -370,6 +376,7 @@ def stop_librespot(proc):
         except subprocess.TimeoutExpired:
             proc.kill()
             print("✓ librespot killed.")
+
 
 def main():
     print("DEBUG: main() started")
@@ -497,7 +504,6 @@ def main():
                 current_track_id = track_id
                 current_item = item
 
-
             # If ffmpeg finished, analyze and reset
             if ffmpeg_proc and ffmpeg_proc.poll() is not None and current_wav:
                 if current_wav.exists() and current_wav.stat().st_size > 100_000:
@@ -516,6 +522,7 @@ def main():
                     # Move file only if analysis succeeded or always?
                     try:
                         import shutil
+
                         shutil.move(str(current_wav), str(final_wav))
                         print(f"  ✓ Moved {current_wav.name} to captures/")
                     except Exception as e:

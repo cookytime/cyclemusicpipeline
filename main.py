@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+import logging
 import os
 import sys
 from pathlib import Path
@@ -25,6 +27,14 @@ def _reexec_with_venv() -> None:
 
 _reexec_with_venv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("cyclemusicpipeline")
+
 """
 Main entry point - orchestrates track analysis and Base44 updates.
 Processes all WAV files in the captures directory.
@@ -48,15 +58,13 @@ def process_wav_file(wav_path: Path, project_root: Path) -> bool:
     Process a single WAV file: analyze → update Base44.
     Returns True if successful, False otherwise.
     """
-    print(f"\n{'='*60}")
-    print(f"Processing: {wav_path.name}")
-    print(f"{'='*60}\n")
+    logger.info(f"Processing: {wav_path.name}")
 
     analyze_script = project_root / "analyze" / "analyze_track.py"
     trackupdate_script = project_root / "manage" / "trackupdate.py"
 
     # Step 1: Analyze the track (generates music_map.json and choreography.json)
-    print("Step 1: Analyzing audio and generating choreography...")
+    logger.info("Step 1: Analyzing audio and generating choreography...")
     try:
         result = subprocess.run(
             [sys.executable, str(analyze_script), str(wav_path)],
@@ -64,25 +72,28 @@ def process_wav_file(wav_path: Path, project_root: Path) -> bool:
             capture_output=True,
             text=True,
         )
-        print(result.stdout)
+        logger.info(result.stdout.strip())
         if result.stderr:
-            print("Warnings:", result.stderr)
+            logger.warning(result.stderr.strip())
     except subprocess.CalledProcessError as e:
-        print(f"❌ Analysis failed: {e}")
+        logger.error(f"Analysis failed: {e}")
         if e.stdout:
-            print(e.stdout)
+            logger.error(e.stdout.strip())
         if e.stderr:
-            print(e.stderr)
+            logger.error(e.stderr.strip())
+        return False
+    except Exception as e:
+        logger.exception(f"Unexpected error during analysis: {e}")
         return False
 
     # Step 2: Extract Spotify ID and update Base44
     spotify_id = extract_spotify_id(wav_path.name)
 
     if not spotify_id:
-        print("⚠️  No Spotify ID found in filename, skipping Base44 update")
+        logger.warning("No Spotify ID found in filename, skipping Base44 update")
         return True  # Analysis succeeded, just no update
 
-    print(f"\nStep 2: Updating Base44 (Spotify ID: {spotify_id})...")
+    logger.info(f"Step 2: Updating Base44 (Spotify ID: {spotify_id})...")
     captures_dir = wav_path.parent
 
     try:
@@ -92,16 +103,19 @@ def process_wav_file(wav_path: Path, project_root: Path) -> bool:
             capture_output=True,
             text=True,
         )
-        print(result.stdout)
+        logger.info(result.stdout.strip())
         if result.stderr:
-            print("Warnings:", result.stderr)
+            logger.warning(result.stderr.strip())
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Base44 update failed: {e}")
+        logger.error(f"Base44 update failed: {e}")
         if e.stdout:
-            print(e.stdout)
+            logger.error(e.stdout.strip())
         if e.stderr:
-            print(e.stderr)
+            logger.error(e.stderr.strip())
+        return False
+    except Exception as e:
+        logger.exception(f"Unexpected error during Base44 update: {e}")
         return False
 
 
@@ -111,17 +125,17 @@ def process_captures() -> None:
     captures_dir = project_root / "captures"
 
     if not captures_dir.exists():
-        print(f"❌ Captures directory not found: {captures_dir}")
+        logger.error(f"Captures directory not found: {captures_dir}")
         sys.exit(1)
 
     # Find all WAV files
     wav_files = sorted(captures_dir.glob("*.wav"))
 
     if not wav_files:
-        print(f"No WAV files found in {captures_dir}")
+        logger.warning(f"No WAV files found in {captures_dir}")
         sys.exit(0)
 
-    print(f"Found {len(wav_files)} WAV file(s) to process\n")
+    logger.info(f"Found {len(wav_files)} WAV file(s) to process")
 
     # Process each file
     results = {"success": 0, "failed": 0, "skipped": 0}
@@ -132,7 +146,7 @@ def process_captures() -> None:
         choreography_path = Path(f"{base_path}.choreography.json")
 
         if choreography_path.exists():
-            print(f"⏭️  Skipping {wav_path.name} (already processed)")
+            logger.info(f"Skipping {wav_path.name} (already processed)")
             results["skipped"] += 1
             continue
 
@@ -145,13 +159,11 @@ def process_captures() -> None:
             results["failed"] += 1
 
     # Summary
-    print(f"\n{'='*60}")
-    print("Processing Complete")
-    print(f"{'='*60}")
-    print(f"✅ Successful: {results['success']}")
-    print(f"❌ Failed: {results['failed']}")
-    print(f"⏭️  Skipped: {results['skipped']}")
-    print(f"Total: {len(wav_files)}")
+    logger.info("Processing Complete")
+    logger.info(f"Successful: {results['success']}")
+    logger.info(f"Failed: {results['failed']}")
+    logger.info(f"Skipped: {results['skipped']}")
+    logger.info(f"Total: {len(wav_files)}")
 
 
 def run_processing_playlist_sync() -> None:

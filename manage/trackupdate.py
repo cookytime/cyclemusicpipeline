@@ -54,7 +54,6 @@ def make_api_request(api_path, method="GET", data=None, params=None):
     else:
         response = requests.request(method, url, headers=headers, json=data)
 
-
     response.raise_for_status()
     return response.json()
 
@@ -116,7 +115,6 @@ def create_track(track_data):
             json=track_data,
         )
 
-
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -139,7 +137,6 @@ def update_track(entity_id, update_data):
             headers={"api_key": API_KEY, "Content-Type": "application/json"},
             json=update_data,
         )
-
 
         response.raise_for_status()
         return response.json()
