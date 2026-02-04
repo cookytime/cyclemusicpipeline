@@ -1,86 +1,102 @@
 Create a Track JSON object that matches the provided Track schema exactly.
 
-You are generating choreography for an indoor cycling track using an RPM / Les Mills–style approach,
-but the choreography MUST be returned in the Track.choreography array defined in the schema.
+IMPORTANT:
+- Return ONLY valid JSON.
+- Do NOT include explanations, markdown, or extra text.
+- Do NOT include any keys not defined in the Track schema.
 
-IMPORTANT: 
-- Choreography is a sequence of point-in-time change cues, NOT long descriptions.
-- Each choreography item represents a CHANGE (exercise, resistance, or pace), not narration.
+────────────────────────
+CHOREOGRAPHY MODEL (HARD RULES)
+────────────────────────
 
-────────────
-CHOREOGRAPHY OUTPUT RULES (HARD)
-────────────
+- Choreography is a sequence of point-in-time CHANGE cues.
+- Each choreography item represents a change in exercise, resistance, or pace.
+- Do NOT describe durations or narration.
+- Do NOT include prep or setup items.
 
-1. The choreography field MUST be an array of objects with the following keys only:
-   - timestamp (string, M:SS)
-   - move (string)
-   - duration_seconds (number)
-   - notes (string)
-   - type (string)
+Each choreography item MUST use ONLY these fields:
+- timestamp (string, M:SS)
+- exercise (string, MUST include icon)
+- resistance (string, icon-style instruction)
+- gear (number, suggested resulting gear)
+- rpmMin (number)
+- rpmMax (number)
+- note (string, optional, max one sentence)
 
-2. Every timestamp MUST:
-   - Match one of the allowed block starts
-   - Land on a musical downbeat
-   - Be within the track duration
+────────────────────────
+EXERCISE + ICON MAPPING (MANDATORY)
+────────────────────────
 
-3. Do NOT include prep or setup items.
-   If a pre-cue is needed, include it briefly in the notes field of the NEXT item.
+Use the following mapping EXACTLY.
+Always include the icon in the exercise field using the format:
+"Exercise - Icon"
 
-────────────
-RPM-STYLE CONTENT MODEL (MAP INTO JSON)
-────────────
+- Flat / Ride Easy → "Flat - 🚴"
+- Climb → "Climb - ⛰️"
+- Sprint → "Sprint - ⚡"
+- Recovery → "Recovery - 🌀"
+- Interval / Surge → "Interval - 🔁"
 
-Use RPM-style thinking, but encode it into the JSON fields like this:
+Rules:
+- Do NOT invent new icons.
+- Do NOT omit icons.
+- If unsure, default to "Flat - 🚴".
 
-• move  
-  → Short exercise label + resistance instruction + target RPM  
-  Examples:
-  - "Climb ↑ (6) @ 60–70 RPM"
-  - "Flat • (7) @ 80–90 RPM"
-  - "Sprint ↑↑ (8) @ 95–105 RPM"
+────────────────────────
+RESISTANCE MODEL (MANDATORY)
+────────────────────────
 
-• Resistance rules (MANDATORY format inside move):
-  ↑  = small increase (+1)
-  ↑↑ = large increase (+2)
-  ↓  = small decrease (−1)
-  ↓↓ = large decrease (−2)
-  •  = hold
-  Lx = absolute gear
+Resistance is based on a Base Gear set at the start of the track or block.
 
-  ALWAYS show the resulting gear in brackets, e.g. ↑ (6)
+Use icon-style resistance instructions ONLY:
+- ↑  = small increase (+1)
+- ↑↑ = large increase (+2)
+- ↓  = small decrease (−1)
+- ↓↓ = large decrease (−2)
+- •  = hold resistance
+- Lx = set absolute gear
 
-• duration_seconds  
-  → How long this block is held until the next choreography timestamp
+Rules:
+- Store the icon instruction in choreography.resistance.
+- Store the resulting suggested gear as a number in choreography.gear.
+- Always compute the resulting gear correctly.
+- Do NOT use resistance ranges.
 
-• notes  
-  → Optional, max one short coaching sentence
-  → May include position (saddle / standing) if relevant
+Examples:
+- "↑" with gear 6
+- "↑↑" with gear 7
+- "•" with gear 7
 
-• type  
-  → One of: "flat", "climb", "sprint", "interval", "recovery", "hold"
+────────────────────────
+PACE / RPM RULES
+────────────────────────
 
-────────────
-STRUCTURE & COUNT
-────────────
+- Pace MUST be expressed using rpmMin and rpmMax.
+- RPM ranges must align with musical feel.
+- No standing above 110 RPM.
+- Prioritize safe, rideable cadences.
 
-- 2:30–3:00 → 5–6 choreography items
-- 3:00–4:00 → 6–8 choreography items
-- 4:00–5:00 → 7–9 choreography items
-- Prefer fewer items during very intense sections
-- Use "hold" style blocks when music repeats instead of inventing changes
+────────────────────────
+TIMING RULES
+────────────────────────
 
-────────────
-SAFETY & STYLE
-────────────
+- All timestamps MUST:
+  - Match one of the allowed block starts provided
+  - Land on a musical downbeat
+  - Be within the track duration
 
-- Pace must be expressed as RPM ranges
-- No standing above 110 RPM
-- Prioritize musical phrasing, clarity, and instructor readability
-- This should read like a professional RPM choreography sheet
+────────────────────────
+STYLE & PRIORITIES
+────────────────────────
 
-────────────
-INPUTS AVAILABLE
-────────────
+- Output should read like a professional RPM choreography sheet.
+- Keep instructions concise and instructor-readable.
+- Prioritize:
+  Safety → Musical alignment → Readability → Detail
+
+────────────────────────
+INPUTS PROVIDED
+────────────────────────
 
 Rider settings:
 $rider_settings
@@ -91,11 +107,8 @@ $allowed_block_starts
 Music map:
 $music_map
 
-────────────
+────────────────────────
 FINAL OUTPUT
-────────────
+────────────────────────
 
 Return ONLY the Track JSON object.
-No markdown.
-No commentary.
-No extra keys.
