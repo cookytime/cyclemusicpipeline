@@ -1,5 +1,5 @@
 # Core Audio Processing
-librosa==0.11.0
+librosa==1.0.0
 soundfile==0.13.1
 audioread==3.1.0
 
